@@ -27,6 +27,96 @@ Export.image.toAsset({
   });
 ```
 
+## Python (GEE)
+- move images from one collection to another
+```
+import ee
+
+SOURCE = (
+    'projects/monthly-tcan-ta-myd11a1-repo1/assets/cgls1km'
+)
+DESTINATION = 'projects/nsfc-hkh/assets/cgls1km'
+DRY_RUN = True
+
+ee.Initialize(project='nsfc-hkh')
+
+source_info = ee.data.getAsset(SOURCE)
+
+if source_info is None:
+    raise RuntimeError(f'Source collection not found: {SOURCE}')
+
+source_type = source_info.get('type', '').upper()
+if source_type not in ('IMAGE_COLLECTION', 'IMAGECOLLECTION'):
+    raise RuntimeError(
+        f'Source is not an ImageCollection; asset type is {source_info.get("type")}'
+    )
+
+source_assets = ee.data.listAssets(SOURCE).get('assets', [])
+
+if not source_assets:
+    raise RuntimeError('The source collection is empty.')
+
+for asset in source_assets:
+    asset_type = asset.get('type', '').upper()
+    if asset_type not in ('IMAGE',):
+        raise RuntimeError(
+            f'Found a non-image child; stopping: {asset.get("name", asset.get("id"))}'
+        )
+
+destination_info = ee.data.getAsset(DESTINATION)
+
+if destination_info is not None:
+    destination_type = destination_info.get('type', '').upper()
+    if destination_type not in ('IMAGE_COLLECTION', 'IMAGECOLLECTION'):
+        raise RuntimeError(
+            f'Destination exists but is not an ImageCollection: '
+            f'{destination_info.get("type")}'
+        )
+
+    destination_assets = ee.data.listAssets(DESTINATION).get('assets', [])
+    destination_names = {
+        (asset.get('name') or asset.get('id')).rsplit('/', 1)[-1]
+        for asset in destination_assets
+    }
+else:
+    destination_names = set()
+
+moves = []
+for asset in source_assets:
+    source_id = asset.get('name') or asset.get('id')
+    image_name = source_id.rsplit('/', 1)[-1]
+    destination_id = f'{DESTINATION}/{image_name}'
+
+    if image_name in destination_names:
+        raise RuntimeError(
+            f'Destination already contains an image named {image_name}; '
+            'no assets were moved.'
+        )
+
+    moves.append((source_id, destination_id))
+
+print(f'Images found: {len(moves)}')
+
+for source_id, destination_id in moves:
+    print(f'{source_id}  ->  {destination_id}')
+
+if DRY_RUN:
+    print('\nDry run only; no assets were moved.')
+else:
+    if destination_info is None:
+        ee.data.createAsset(
+            {'type': 'IMAGE_COLLECTION'},
+            DESTINATION
+        )
+        print(f'\nCreated destination collection: {DESTINATION}')
+
+    for index, (source_id, destination_id) in enumerate(moves, start=1):
+        ee.data.renameAsset(source_id, destination_id)
+        print(f'Moved {index}/{len(moves)}: {source_id}')
+
+    print('\nMove complete. The source collection is now empty.')
+```
+
 ## R
 - Import Windows fonts to R
 ```
